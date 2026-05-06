@@ -1,0 +1,281 @@
+/* OptoMeasure — VR Patient View Styles (vr.css) */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #ffffff;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+
+/* ── Connection Overlay ──────────────────────────────────────────────────── */
+
+.connect-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: #0a0e17;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+}
+
+.connect-overlay.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.connect-card {
+    text-align: center;
+    padding: 40px;
+    background: rgba(17, 24, 39, 0.98);
+    border: 1px solid rgba(99, 132, 255, 0.2);
+    border-radius: 20px;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    max-width: 400px;
+    width: 90%;
+}
+
+.connect-icon {
+    font-size: 52px;
+    margin-bottom: 16px;
+}
+
+.connect-card h1 {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 8px;
+}
+
+.connect-card p {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    margin-bottom: 24px;
+}
+
+.code-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.room-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.5rem;
+    font-weight: 700;
+    letter-spacing: 0.3em;
+    color: #818cf8;
+    background: rgba(99, 102, 241, 0.1);
+    border: 2px solid rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    padding: 16px 24px;
+}
+
+.btn-copy {
+    background: rgba(255, 255, 255, 0.08);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    color: #f1f5f9;
+    border-radius: 12px;
+    padding: 0 20px;
+    height: 76px;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-copy:hover {
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.35);
+}
+
+.connect-status {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.82rem;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-dot.waiting {
+    background: #f59e0b;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.status-dot.connected {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1;   }
+    50%       { opacity: 0.3; }
+}
+
+/* ── VR Split Screen ─────────────────────────────────────────────────────── */
+/*
+    Layout strategy:
+    1. .vr-container fills the viewport, sized precisely to the physical
+       screen dimensions via CSS custom properties set by JS (computeLayout).
+    2. Two .eye-view halves, each exactly --eye-w wide.
+    3. .eye-content is positioned at the geometric centre of its half via
+       left:50%; top:50%; transform:translate(-50%,-50%).
+    4. JS applyVisualState() applies ONE combined translateX offset per side
+       that encodes both the IPD correction and the prism shift.
+*/
+
+.vr-container {
+    width:    var(--container-w, 100vw);
+    height:   var(--container-h, 100vh);
+    display:  flex;
+    flex-direction: row;
+    background: #ffffff;
+    position: absolute;
+    top:  50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    overflow: hidden;
+}
+
+.eye-view {
+    width:    var(--eye-w);
+    height:   var(--container-h);
+    position: relative;
+    overflow: hidden;
+    background: #ffffff;
+}
+
+.vr-divider {
+    width:      2px;
+    background: #000000;
+    height:     100%;
+    z-index:    10;
+    flex-shrink: 0;
+}
+
+/* The zero-size anchor at the geometric centre of each half */
+.eye-content {
+    position:  absolute;
+    left:  50%;
+    top:   50%;
+    width:  0;
+    height: 0;
+    transform: translate(-50%, -50%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Lines ───────────────────────────────────────────────────────────────── */
+
+/* Left eye — horizontal */
+.h-line-left,
+.h-line-right {
+    background: #000000;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+}
+.h-line-left  { right: 0; }   /* JS overrides with halfDot offset */
+.h-line-right { left:  0; }
+
+/* Right eye — vertical */
+.v-line-top,
+.v-line-bottom {
+    background: #000000;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.v-line-top    { bottom: 0; }
+.v-line-bottom { top:    0; }
+
+/* Dot */
+.center-dot {
+    background: #000000;
+    border-radius: 50%;
+    position: absolute;
+    top:  50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+}
+
+/* ── Connection indicator ────────────────────────────────────────────────── */
+
+.conn-indicator {
+    position:      fixed;
+    top:   8px;
+    right: 8px;
+    width:  8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    z-index: 10;
+    transition: background 0.3s ease;
+}
+
+.conn-indicator.connected {
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+}
+
+/* ── Debug overlay ───────────────────────────────────────────────────────── */
+
+.debug-overlay {
+    position: fixed;
+    bottom: 8px;
+    left:   8px;
+    z-index: 200;
+    background: rgba(0, 0, 0, 0.75);
+    color: #22c55e;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    line-height: 1.5;
+    padding: 8px 12px;
+    border-radius: 8px;
+    white-space: pre;
+    pointer-events: none;
+}
+
+/* ── Landscape hint ──────────────────────────────────────────────────────── */
+
+@media (orientation: portrait) {
+    .vr-container::after {
+        content: '↻  Rotate device to Landscape';
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgba(0, 0, 0, 0.92);
+        color: #f1f5f9;
+        font-family: 'Inter', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+}
