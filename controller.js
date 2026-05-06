@@ -180,7 +180,7 @@
         $('stepNum').textContent    = ctrl.currentStep;
         $('shiftValue').textContent = getEffectiveShiftCm(step, ctrl.mode).toFixed(3);
 
-        renderStepTable();
+
 
         // Highlight step table rows
         document.querySelectorAll('.step-row[data-step]').forEach(row => {
