@@ -1,13 +1,15 @@
 /**
  * OptoMeasure — Controller (Doctor's Phone) — controller.js
  *
- * FIX LOG:
- *  1. IPD slider range corrected to match shared.js (50–90 mm, default 75).
- *  2. sendUpdate() now always sends mode + ipd together so VR stays in sync
- *     on reconnect.
- *  3. 'i' / 'I' keyboard shortcut toggles between BO and BI mode.
- *  4. Added patient name / session note field (local only, not transmitted).
- *  5. Minor: btnConnect disabled state restored correctly on all error paths.
+ * CHANGE LOG (Base-In fix for +8.0D):
+ *  1. activeSteps() helper — returns VR_CONFIG.stepsBI in BI mode,
+ *     VR_CONFIG.steps in BO mode. All step references use this helper.
+ *  2. sendUpdate() sends the correct shiftCm from the active step table.
+ *  3. updateUI() reads step count from activeSteps() so ± buttons
+ *     clamp correctly against the BI table (7 steps, max 24Δ).
+ *  4. Displayed prism uses getAdjustedPrism() in BI mode (subtracts
+ *     BASE_IN_OFFSET=4) so the shown value reflects net divergence demand.
+ *  5. Toast messages updated to show BI max (24Δ) vs BO max (38Δ).
  */
 (function () {
     'use strict';
@@ -30,6 +32,11 @@
         t.textContent = msg;
         t.classList.add('show');
         setTimeout(() => t.classList.remove('show'), duration);
+    }
+
+    // ── Active step table (BO uses normal steps, BI uses gentler stepsBI) ─────
+    function activeSteps() {
+        return (ctrl.mode === 'BI') ? VR_CONFIG.stepsBI : VR_CONFIG.steps;
     }
 
     // ── Connection ────────────────────────────────────────────────────────────
@@ -123,32 +130,43 @@
         }
     }
 
-    /** Send complete state so VR phone is always in sync */
+    /**
+     * sendUpdate()
+     * Sends complete state. Includes:
+     *  - activeStepTable: 'BI' or 'BO' so vr.js knows which step array to use
+     *  - shiftCm from the correct step table
+     *  - adjustedPrism (display value with BASE_IN_OFFSET applied in BI mode)
+     */
     function sendUpdate() {
-        const step = VR_CONFIG.steps[ctrl.currentStep];
+        const steps = activeSteps();
+        const step  = steps[ctrl.currentStep];
         sendCommand({
-            type:    'update',
-            step:    ctrl.currentStep,
-            shiftCm: step.shiftCm,
-            prism:   step.prism,
-            mode:    ctrl.mode,
-            ipd:     ctrl.ipd,
+            type:            'update',
+            step:            ctrl.currentStep,
+            shiftCm:         step.shiftCm,
+            prism:           step.prism,
+            adjustedPrism:   getAdjustedPrism(step.prism, ctrl.mode),
+            mode:            ctrl.mode,
+            ipd:             ctrl.ipd,
+            activeStepTable: ctrl.mode,   // tells VR which table to index into
         });
     }
 
     // ── UI ────────────────────────────────────────────────────────────────────
     function updateUI() {
-        const step = VR_CONFIG.steps[ctrl.currentStep];
+        const steps = activeSteps();
+        const step  = steps[ctrl.currentStep];
+        const displayPrism = getAdjustedPrism(step.prism, ctrl.mode);
 
-        $('prismValue').textContent = step.prism;
+        $('prismValue').textContent = displayPrism;
         $('stepNum').textContent    = ctrl.currentStep;
         $('shiftValue').textContent = step.shiftCm.toFixed(3);
 
-        // Highlight step table
+        // Highlight step table rows
         document.querySelectorAll('.step-row[data-step]').forEach(row => {
             const s = parseInt(row.dataset.step, 10);
             row.classList.remove('active', 'passed');
-            if (s === ctrl.currentStep)  row.classList.add('active');
+            if (s === ctrl.currentStep)   row.classList.add('active');
             else if (s < ctrl.currentStep) row.classList.add('passed');
         });
 
@@ -160,15 +178,17 @@
         $('ipdValue').textContent = ctrl.ipd;
         $('ipdSlider').value      = ctrl.ipd;
 
-        // Disable ± buttons at limits
+        // Disable ± buttons at limits of the ACTIVE step table
         $('btnMinus').disabled = ctrl.currentStep <= 0;
-        $('btnPlus').disabled  = ctrl.currentStep >= VR_CONFIG.steps.length - 1;
+        $('btnPlus').disabled  = ctrl.currentStep >= steps.length - 1;
     }
 
     // ── Actions ───────────────────────────────────────────────────────────────
     function stepForward() {
-        if (ctrl.currentStep >= VR_CONFIG.steps.length - 1) {
-            showToast('Maximum step reached (38Δ)');
+        const maxStep = activeSteps().length - 1;
+        if (ctrl.currentStep >= maxStep) {
+            const maxPrism = activeSteps()[maxStep].prism;
+            showToast('Maximum step reached (' + maxPrism + 'Δ)');
             return;
         }
         ctrl.currentStep++;
@@ -195,10 +215,14 @@
 
     function setMode(mode) {
         ctrl.mode = mode;
-        ctrl.currentStep = 0;
+        ctrl.currentStep = 0;   // always reset to step 0 on mode change
         updateUI();
         sendUpdate();
-        showToast(mode === 'BO' ? '◀▶  Base-Out (Convergence)' : '▶◀  Base-In (Divergence)');
+        if (mode === 'BO') {
+            showToast('◀▶  Base-Out (Convergence) — max 38Δ');
+        } else {
+            showToast('▶◀  Base-In (Divergence) — max 24Δ, gentle steps');
+        }
     }
 
     function setIPD(value) {
@@ -208,15 +232,17 @@
     }
 
     function recordBreak() {
-        const step = VR_CONFIG.steps[ctrl.currentStep];
-        $('breakVal').textContent = step.prism + 'Δ (Step ' + ctrl.currentStep + ')';
-        showToast('Break point recorded: ' + step.prism + 'Δ');
+        const step = activeSteps()[ctrl.currentStep];
+        const displayPrism = getAdjustedPrism(step.prism, ctrl.mode);
+        $('breakVal').textContent = displayPrism + 'Δ (Step ' + ctrl.currentStep + ')';
+        showToast('Break point recorded: ' + displayPrism + 'Δ');
     }
 
     function recordRecovery() {
-        const step = VR_CONFIG.steps[ctrl.currentStep];
-        $('recoveryVal').textContent = step.prism + 'Δ (Step ' + ctrl.currentStep + ')';
-        showToast('Recovery point recorded: ' + step.prism + 'Δ');
+        const step = activeSteps()[ctrl.currentStep];
+        const displayPrism = getAdjustedPrism(step.prism, ctrl.mode);
+        $('recoveryVal').textContent = displayPrism + 'Δ (Step ' + ctrl.currentStep + ')';
+        showToast('Recovery point recorded: ' + displayPrism + 'Δ');
     }
 
     function clearResults() {
@@ -239,8 +265,8 @@
 
         $('ipdSlider').addEventListener('input', function () { setIPD(this.value); });
 
-        $('btnBreak').addEventListener('click',       recordBreak);
-        $('btnRecovery').addEventListener('click',    recordRecovery);
+        $('btnBreak').addEventListener('click',        recordBreak);
+        $('btnRecovery').addEventListener('click',     recordRecovery);
         $('btnClearResults').addEventListener('click', clearResults);
 
         // Keyboard shortcuts
@@ -263,7 +289,7 @@
             }
         });
 
-        // Touch support for action buttons
+        // Touch support
         document.querySelectorAll('.btn-move, .btn-record, .mode-btn').forEach(btn => {
             btn.addEventListener('touchend', function (e) {
                 e.preventDefault();
@@ -274,7 +300,6 @@
 
     // ── Init ──────────────────────────────────────────────────────────────────
     function init() {
-        // Sync slider min/max from config
         const slider = $('ipdSlider');
         slider.min   = VR_CONFIG.minIPD;
         slider.max   = VR_CONFIG.maxIPD;
