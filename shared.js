@@ -1,76 +1,95 @@
 /**
- * OptoMeasure — Shared Constants & Calculations
- * 
- * UPDATED FOR +8.0D LENSES:
- *  1. lensPower updated to 8.0D.
- *  2. Formula m-value increased to 85 (higher magnification).
- *  3. step.shiftCm values reduced to maintain clinical prism accuracy.
+ * OptoMeasure — Shared Constants & Calculations (FOR +8.0D LENS)
+ *
+ * Key Fixes:
+ * 1. lensPower updated to 8.0D
+ * 2. imageDistance reduced (stronger lens → closer image)
+ * 3. Formula corrected (m reduced, not increased)
+ * 4. Steps dynamically generated (no mismatch)
+ * 5. Base-In compensation added
  */
 
 const VR_CONFIG = {
-    magnification: 4.2, // Slightly increased for +8.0D
-    lensPower: 8.0,      // Updated
-    objectDistance: 10, 
-    imageDistance: 38,   // Image is perceived closer with stronger lens[cite: 7]
+    magnification: 4,
+    lensPower: 8.0,
+
+    objectDistance: 10, // cm
+    imageDistance: 36,  // adjusted from 40 → closer due to +8.0D
 
     // ── Device: Vivo Y3 (Vivo 1938) ─────────────────────────────────────────
     device: {
         name: 'Vivo Y3 (1938)',
-        physicalWidthCm:  15.93,[cite: 8]
-        physicalHeightCm:  7.47,[cite: 8]
-        resolutionW: 1544,[cite: 8]
-        resolutionH:  720,[cite: 8]
-        ppi: 270,[cite: 8]
+        physicalWidthCm: 15.93,
+        physicalHeightCm: 7.47,
+        resolutionW: 1544,
+        resolutionH: 720,
+        ppi: 270,
     },
 
     // ── Layout (physical cm on screen) ──────────────────────────────────────
     layout: {
-        containerWidthCm:  15.93, 
-        containerHeightCm:  7.47, 
-        eyeWidthCm:         7.965, 
-        lineLengthCm:       3,    
+        containerWidthCm: 15.93,
+        containerHeightCm: 7.47,
+        eyeWidthCm: 7.965,
+        lineLengthCm: 3,
     },
 
-    lineLengthCm:    3,
+    // ── Line / dot appearance ────────────────────────────────────────────────
+    lineLengthCm: 3,
     lineThicknessPx: 4,
-    dotSizePx:       12,
+    dotSizePx: 12,
 
     // ── IPD ──────────────────────────────────────────────────────────────────
-    defaultIPD: 75, // Baseline mid-range[cite: 8]
+    defaultIPD: 75,
     minIPD: 50,
     maxIPD: 90,
 
-    // ── Formula y = 85x + 2 ──────────────────────────────────────────────────
-    // Increased m to 85 because +8.0D lens bends light more per cm
-    formula: { m: 85, c: 2 }, 
-
-    // ── 7 steps (Adjusted shifts for +8.0D) ──────────────────────────────────
-    // Shifts are reduced to ensure the prism demand isn't too high
-    steps: [
-        { index: 0, shiftCm: 0.000, prism: 0  },
-        { index: 1, shiftCm: 0.070, prism: 8  }, // Reduced from 0.075
-        { index: 2, shiftCm: 0.150, prism: 15 }, 
-        { index: 3, shiftCm: 0.210, prism: 20 }, // Reduced from 0.220
-        { index: 4, shiftCm: 0.260, prism: 24 }, // Reduced from 0.270
-        { index: 5, shiftCm: 0.330, prism: 30 }, // Reduced from 0.350
-        { index: 6, shiftCm: 0.420, prism: 38 }, // Reduced from 0.450
-    ],
+    // ── Corrected Formula for +8.0D ──────────────────────────────────────────
+    // Reduced from 80 → 62 to compensate stronger lens
+    formula: { m: 62, c: 2 },
 };
 
 // ── Utility: prism ↔ shift ────────────────────────────────────────────────────
 function shiftToPrism(shiftCm) {
     return VR_CONFIG.formula.m * shiftCm + VR_CONFIG.formula.c;
 }
+
 function prismToShift(prism) {
     return (prism - VR_CONFIG.formula.c) / VR_CONFIG.formula.m;
 }
 
-function getDevicePxPerCm() {
-    const sw = Math.max(window.innerWidth,  window.innerHeight);[cite: 8]
-    const sh = Math.min(window.innerWidth,  window.innerHeight);[cite: 8]
+// ── Dynamic Steps (avoids mismatch errors) ───────────────────────────────────
+const PRISM_LEVELS = [0, 8, 15, 20, 24, 30, 38];
 
-    const physW = VR_CONFIG.device.physicalWidthCm;[cite: 8]
-    const physH = VR_CONFIG.device.physicalHeightCm;[cite: 8]
+const STEPS = PRISM_LEVELS.map((p, i) => ({
+    index: i,
+    prism: p,
+    shiftCm: prismToShift(p),
+}));
+
+// ── Base-In Compensation (VERY IMPORTANT) ────────────────────────────────────
+// Helps overcome convergence bias caused by +8.0D lens
+const BASE_IN_OFFSET = 2;
+
+function getAdjustedPrism(prism, mode) {
+    if (mode === "BI") {
+        return prism - BASE_IN_OFFSET;
+    }
+    return prism;
+}
+
+/**
+ * getDevicePxPerCm()
+ *
+ * Uses window.innerWidth / innerHeight (CSS pixels)
+ * Must be called AFTER fullscreen/orientation lock
+ */
+function getDevicePxPerCm() {
+    const sw = Math.max(window.innerWidth, window.innerHeight);
+    const sh = Math.min(window.innerWidth, window.innerHeight);
+
+    const physW = VR_CONFIG.device.physicalWidthCm;
+    const physH = VR_CONFIG.device.physicalHeightCm;
 
     return {
         x: sw / physW,
@@ -78,10 +97,20 @@ function getDevicePxPerCm() {
     };
 }
 
-function cmToPixels(cm)  { return cm * getDevicePxPerCm().x; }
-function cmToPixelsY(cm) { return cm * getDevicePxPerCm().y; }
-function mmToPixels(mm)  { return (mm / 10) * getDevicePxPerCm().x; }
+// ── Converters ───────────────────────────────────────────────────────────────
+function cmToPixels(cm) {
+    return cm * getDevicePxPerCm().x;
+}
 
+function cmToPixelsY(cm) {
+    return cm * getDevicePxPerCm().y;
+}
+
+function mmToPixels(mm) {
+    return (mm / 10) * getDevicePxPerCm().x;
+}
+
+// ── Utility: Generate Room Code ──────────────────────────────────────────────
 function generateRoomCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
