@@ -172,7 +172,7 @@ html, body {
 
 .vr-divider {
     width:      2px;
-    background: #000000;
+    background: #ffffff;
     height:     100%;
     z-index:    10;
     flex-shrink: 0;
