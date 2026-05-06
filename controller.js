@@ -32,6 +32,29 @@
         setTimeout(() => t.classList.remove('show'), duration);
     }
 
+    // ── Active step table (BO uses normal steps, BI uses gentler stepsBI) ─────
+    function activeSteps() {
+        return (ctrl.mode === 'BI') ? VR_CONFIG.stepsBI : VR_CONFIG.steps;
+    }
+
+
+    function renderStepTable() {
+        const table = document.querySelector('.step-table');
+        if (!table) return;
+        table.querySelectorAll('.step-row[data-step]').forEach(row => row.remove());
+
+        activeSteps().forEach(step => {
+            if (step.index === 0) return;
+            const row = document.createElement('div');
+            row.className = 'step-row';
+            row.dataset.step = String(step.index);
+            const shownPrism = getAdjustedPrism(step.prism, ctrl.mode);
+            const shownShift = getEffectiveShiftCm(step, ctrl.mode).toFixed(3);
+            row.innerHTML = `<span>${step.index}</span><span>${shownShift}</span><span>${shownPrism}</span>`;
+            table.appendChild(row);
+        });
+    }
+
     // ── Connection ────────────────────────────────────────────────────────────
     function connect() {
         const code = $('inputRoomCode').value.trim().toUpperCase();
@@ -144,7 +167,8 @@
         $('stepNum').textContent    = ctrl.currentStep;
         $('shiftValue').textContent = step.shiftCm.toFixed(3);
 
-        // Highlight step table
+
+        // Highlight step table rows
         document.querySelectorAll('.step-row[data-step]').forEach(row => {
             const s = parseInt(row.dataset.step, 10);
             row.classList.remove('active', 'passed');

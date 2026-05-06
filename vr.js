@@ -98,9 +98,15 @@
      * (The -50%,-50% base centring is preserved in the translate call.)
      */
     function applyVisualState() {
-        const step     = VR_CONFIG.steps[vrState.currentStep];
+        const steps    = activeSteps();
+        const stepIdx  = Math.max(0, Math.min(vrState.currentStep, steps.length - 1));
+        const step     = steps[stepIdx];
+
         const pxPerCm  = getDevicePxPerCm();
-        const shiftPx  = step.shiftCm * pxPerCm.x;
+        const shiftCm  = (typeof vrState.shiftCmOverride === 'number')
+            ? vrState.shiftCmOverride
+            : getEffectiveShiftCm(step, vrState.mode);
+        const shiftPx  = shiftCm * pxPerCm.x;
 
         const eyeWPx    = VR_CONFIG.layout.eyeWidthCm * pxPerCm.x;
         const baseHalf  = eyeWPx / 2;
@@ -133,7 +139,8 @@
         const p    = getDevicePxPerCm();
         el.textContent =
             `pxPerCm x:${p.x.toFixed(2)} y:${p.y.toFixed(2)}\n` +
-            `Step ${vrState.currentStep} | shift:${step.shiftCm}cm = ${shiftPx.toFixed(1)}px\n` +
+            `Mode: ${vrState.mode} | Table: ${vrState.mode === 'BI' ? 'stepsBI' : 'steps'}\n` +
+            `Step ${vrState.currentStep} | shift:${shiftCm.toFixed(3)}cm = ${shiftPx.toFixed(1)}px | prism:${step.prism}Δ\n` +
             `IPD:${vrState.ipd}mm | ipdOff:${ipdOff.toFixed(1)}px\n` +
             `leftX:${leftX.toFixed(1)}px  rightX:${rightX.toFixed(1)}px\n` +
             `Mode:${vrState.mode} | viewport:${window.innerWidth}×${window.innerHeight}`;
@@ -143,9 +150,17 @@
     function handleCommand(data) {
         switch (data.type) {
             case 'update':
-                vrState.currentStep = Math.max(0, Math.min(data.step, VR_CONFIG.steps.length - 1));
-                if (data.mode) vrState.mode = data.mode;
-                if (data.ipd)  vrState.ipd  = data.ipd;
+                // Set mode FIRST so activeSteps() returns the right table
+                if (data.mode)            vrState.mode = data.mode;
+                if (data.activeStepTable) vrState.mode = data.activeStepTable;
+                if (data.ipd)             vrState.ipd  = data.ipd;
+                if (typeof data.shiftCm === 'number') vrState.shiftCmOverride = data.shiftCm;
+                else vrState.shiftCmOverride = null;
+                // Clamp step to the active table length
+                vrState.currentStep = Math.max(
+                    0,
+                    Math.min(data.step, activeSteps().length - 1)
+                );
                 applyVisualState();
                 break;
             case 'reset':
@@ -188,7 +203,13 @@
 
     // ── PeerJS ────────────────────────────────────────────────────────────────
     function initPeer() {
-        vrState.roomCode   = generateRoomCode();
+        if (typeof Peer === 'undefined') {
+            const txt = $('connectStatus');
+            if (txt) txt.innerHTML = '<span class="status-dot waiting"></span> PeerJS failed to load. Check internet/CDN.';
+            return;
+        }
+
+        vrState.roomCode = generateRoomCode();
         $('roomCode').textContent = vrState.roomCode;
 
         const peerId = 'optovr-' + vrState.roomCode.toLowerCase();
