@@ -143,7 +143,7 @@
         sendCommand({
             type:            'update',
             step:            ctrl.currentStep,
-            shiftCm:         step.shiftCm,
+            shiftCm:         getEffectiveShiftCm(step, ctrl.mode),
             prism:           step.prism,
             adjustedPrism:   getAdjustedPrism(step.prism, ctrl.mode),
             mode:            ctrl.mode,
@@ -160,7 +160,8 @@
 
         $('prismValue').textContent = displayPrism;
         $('stepNum').textContent    = ctrl.currentStep;
-        $('shiftValue').textContent = step.shiftCm.toFixed(3);
+        $('shiftValue').textContent = getEffectiveShiftCm(step, ctrl.mode).toFixed(3);
+
 
         // Highlight step table rows
         document.querySelectorAll('.step-row[data-step]').forEach(row => {

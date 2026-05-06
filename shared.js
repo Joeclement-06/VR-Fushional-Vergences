@@ -104,6 +104,13 @@ function getAdjustedPrism(prism, mode) {
     return prism;
 }
 
+function getEffectiveShiftCm(step, mode) {
+    if (!step) return 0;
+    if (mode !== 'BI') return step.shiftCm;
+    const effectivePrism = getAdjustedPrism(step.prism, mode);
+    return Math.max(0, prismToShift(effectivePrism, mode));
+}
+
 // ── Device scaling ────────────────────────────────────────────────────────────
 function getDevicePxPerCm() {
     // Use CSS pixels (window.innerWidth), NOT screen.width (physical px on Android)
